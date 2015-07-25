@@ -30,14 +30,17 @@ __version__ = "2013-04-07"
 __email__ = "jeff@rowberg.net"
 
 import sys, optparse, serial, struct, time, datetime, re, signal
+import json,httplib
+
 
 options = []
 filter_uuid = []
 filter_mac = []
 filter_rssi = 0
+file_send_counter = 0
 
 def main():
-    global options, filter_uuid, filter_mac, filter_rssi
+    global options, filter_uuid, filter_mac, filter_rssi, file_send_counter
 
     class IndentedHelpFormatterWithNL(optparse.IndentedHelpFormatter):
       def format_description(self, description):
@@ -412,47 +415,89 @@ def bgapi_parse(b):
                     # Print out just manufacturer data
                     data_list = [(x - 65536) if (x & 0x8000) else x for x in ad_manufacturer]
 		    print data_list
+		
+		global file_send_counter
+		file_send_counter += 1
 
-                    if len(filter_mac) > 0:
-                        match = 0
-                        for mac in filter_mac:
-                            if mac == sender[:-len(mac) - 1:-1]:
-                                match = 1
-                                break
+		# send file if its time
+		if file_send_counter == 10:
+		   file_send_counter = 0
+		   sendtoparse()
 
-                        if match == 0: display = 0
+		if len(filter_mac) > 0:
+			match = 0
+			for mac in filter_mac:
+				if mac == sender[:-len(mac) - 1:-1]:
+					match = 1
+					break
 
-                    if display and len(filter_uuid) > 0:
-                        if not [i for i in filter_uuid if i in ad_services]: display = 0
+			if match == 0: display = 0
 
-                    if display and filter_rssi > 0:
-                        if -filter_rssi > rssi: display = 0
+		if display and len(filter_uuid) > 0:
+			if not [i for i in filter_uuid if i in ad_services]: display = 0
 
-                    if display:
-                        #print "gap_scan_response: rssi: %d, packet_type: %d, sender: %s, address_type: %d, bond: %d, data_len: %d" % \
-                        #    (rssi, packet_type, ':'.join(['%02X' % ord(b) for b in sender[::-1]]), address_type, bond, data_len)
-                        t = datetime.datetime.now()
+		if display and filter_rssi > 0:
+			if -filter_rssi > rssi: display = 0
 
-                        disp_list = []
-                        for c in options.display:
-                            if c == 't':
-                                disp_list.append("%ld.%03ld" % (time.mktime(t.timetuple()), t.microsecond/1000))
-                            elif c == 'r':
-                                disp_list.append("%d" % rssi)
-                            elif c == 'p':
-                                disp_list.append("%d" % packet_type)
-                            elif c == 's':
-                                disp_list.append("%s" % ''.join(['%02X' % b for b in sender[::-1]]))
-                            elif c == 'a':
-                                disp_list.append("%d" % address_type)
-                            elif c == 'b':
-                                disp_list.append("%d" % bond)
-                            elif c == 'd':
-                                disp_list.append("%s" % ''.join(['%02X' % b for b in data_data]))
+		if display:
+			#print "gap_scan_response: rssi: %d, packet_type: %d, sender: %s, address_type: %d, bond: %d, data_len: %d" % \
+			#    (rssi, packet_type, ':'.join(['%02X' % ord(b) for b in sender[::-1]]), address_type, bond, data_len)
+			t = datetime.datetime.now()
 
-                        print ' '.join(disp_list)
+			disp_list = []
+			for c in options.display:
+				if c == 't':
+					disp_list.append("%ld.%03ld" % (time.mktime(t.timetuple()), t.microsecond/1000))
+				elif c == 'r':
+					disp_list.append("%d" % rssi)
+				elif c == 'p':
+					disp_list.append("%d" % packet_type)
+				elif c == 's':
+					disp_list.append("%s" % ''.join(['%02X' % b for b in sender[::-1]]))
+				elif c == 'a':
+					disp_list.append("%d" % address_type)
+				elif c == 'b':
+					disp_list.append("%d" % bond)
+				elif c == 'd':
+					disp_list.append("%s" % ''.join(['%02X' % b for b in data_data]))
+
+			print ' '.join(disp_list)
 
         bgapi_rx_buffer = []
+
+def sendtoparse():
+	appID = "kKW7oJS0nwEG4V6f3LvYooU5BQxFnH6eZ9aS31A3"
+	apiKey = "HEZHvUyEqV4VOV61YaEFbMywGKq7pJNlPhlQtWRt"
+	uploadFilename = "samples.txt"
+
+	connection = httplib.HTTPSConnection('api.parse.com', 443)
+	connection.connect()
+	connection.request('POST', '/1/files/' + uploadFilename, open(uploadFilename, 'rb').read(), {
+	       "X-Parse-Application-Id": appID,
+	       "X-Parse-REST-API-Key": apiKey,
+	       "Content-Type": "text/plain"
+	     })
+
+	result = json.loads(connection.getresponse().read())
+	filename = result["name"]
+	#print filename + ' uploaded'
+
+	#Uploaded the file to Parse
+	#Now associate it with Event Object
+	connection.request('POST','/1/classes/EventObject', json.dumps({
+	    "name": "Sample",
+	    "data": {
+		"name": filename,
+		"__type": "File"
+		 }
+	    }), {
+		"X-Parse-Application-Id": appID,
+		"X-Parse-REST-API-Key": apiKey,
+		"Content-Type": "applicaton/json"
+	     }
+	    )
+	result = json.loads(connection.getresponse().read())
+	#print filename + ' associated with object ' + result["objectId"]
 
 # gracefully exit without a big exception message if possible
 def ctrl_c_handler(signal, frame):
