@@ -40,7 +40,9 @@ filter_rssi = 0
 file_send_counter = 0
 
 # parse stuff
-accel_scaling = 2**15
+acc_x_scaling = 2**15
+acc_y_scaling = 2**15
+acc_z_scaling = 2**14
 gyro_scaling = 131
 temp_scaling = 0.03125
 pulse_scaling = 1024
@@ -431,11 +433,15 @@ def bgapi_parse(b):
 					file_send_counter += 1
 					#print data_list
 					#print "ad_local_name = %s" % ad_local_name 
-					f.write(' '.join(str(e) for e in data_list)) 
+					
+					inputchunks = ','.join(str(e) for e in data_list)
+					#print "inputchunks = %s" % inputchunks
+					parse_chunks(inputchunks, True)
+					#f.write(' '.join(str(e) for e in data_list)) 
 					f.write('\n')
 
 		# send file if its time
-		if file_send_counter == 10:
+		if file_send_counter == 5:
 		   file_send_counter = 0
 		   sendtoparse()
 
@@ -507,8 +513,12 @@ def upload(upload_data):
         result = json.loads(connection.getresponse().read())
         #print result
 
-def parse_chunks(chunks):
+def parse_chunks(chunks, write):
         chunks_length = len(chunks)
+
+	if (write == True):
+		#print "chunks to parse_chunks = %s" % chunks.split(',')
+		chunks = chunks.split(',')
 
         a_x_list = 0 
         a_y_list = 0
@@ -520,33 +530,44 @@ def parse_chunks(chunks):
         pul_list = 0
 
         for i in xrange(0, chunks_length, 8):
-		tmp_chunks = re.findall("[-+]?\d+[\.]?\d*", chunks[i])
-		#print "intermediate chunks = %s" % chunks
-		a_x_list = (float(tmp_chunks[0]))
-		a_y_list = (float(tmp_chunks[1]))
-		a_z_list = (float(tmp_chunks[2]))
-		g_x_list = (float(tmp_chunks[3]))
-		g_y_list = (float(tmp_chunks[4]))
-		g_z_list = (float(tmp_chunks[5]))
-		tmp_list = temp_scaling * (float(tmp_chunks[6]))
-		pul_list = (float(tmp_chunks[7]))
+		if (write == False):
+			tmp_chunks = re.findall("[-+]?\d+[\.]?\d*", chunks[i])
+		else:
+			tmp_chunks = chunks
+		#print "intermediate chunks = %s" % tmp_chunks 
+		try:
+			a_x_list = (float(tmp_chunks[0])) / acc_x_scaling
+			a_y_list = (float(tmp_chunks[1])) / acc_y_scaling
+			a_z_list = (float(tmp_chunks[2])) / acc_z_scaling
+			g_x_list = (float(tmp_chunks[3])) / gyro_scaling
+			g_y_list = (float(tmp_chunks[4])) / gyro_scaling
+			g_z_list = (float(tmp_chunks[5])) / gyro_scaling
+			tmp_list = temp_scaling * (float(tmp_chunks[6]))
+			pul_list = (float(tmp_chunks[7]))
 
-                upload_data = [a_x_list, a_y_list, a_z_list, g_x_list, g_y_list, g_z_list, tmp_list, pul_list]
-                print upload_data
-                upload(upload_data)
-
+			upload_data = [a_x_list, a_y_list, a_z_list, g_x_list, g_y_list, g_z_list, tmp_list, pul_list]
+			#print upload_data
+			if (write == True):
+				str_to_write = ','.join(str(e) for e in upload_data)
+				f.write(str_to_write)
+				f.write("\n")
+				upload(upload_data)
+		except:
+			print "something went wrong with input data"
+		
 def sendtoparse():
         inputlines = []
         global f
 	f.seek(0,0)
 	inputlines = f.readlines()
-	f = open(uploadFilename, 'w+')
-	print "lines read = %d" % len(inputlines)
-	parse_chunks(inputlines)
+	#f = open(uploadFilename, 'w+')
+	#print "lines read = %d" % len(inputlines)
+	parse_chunks(inputlines, False)
 
 # gracefully exit without a big exception message if possible
 def ctrl_c_handler(signal, frame):
-    #print 'Goodbye, cruel world!'
+    print 'Goodbye, cruel world!'
+    f.close()
     exit(0)
 
 signal.signal(signal.SIGINT, ctrl_c_handler)
