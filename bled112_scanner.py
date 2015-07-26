@@ -31,7 +31,7 @@ __email__ = "jeff@rowberg.net"
 
 import sys, optparse, serial, struct, time, datetime, re, signal
 import json,httplib
-
+import os
 
 options = []
 filter_uuid = []
@@ -429,7 +429,7 @@ def bgapi_parse(b):
 				    if (len(ad_local_name) > 0):
 					global file_send_counter
 					file_send_counter += 1
-					print data_list
+					#print data_list
 					#print "ad_local_name = %s" % ad_local_name 
 					f.write(' '.join(str(e) for e in data_list)) 
 					f.write('\n')
@@ -481,7 +481,17 @@ def bgapi_parse(b):
         bgapi_rx_buffer = []
 
 def upload(upload_data):
-        connection.request('POST','/1/classes/EventObject', json.dumps({
+        connection.request('POST','/1/classes/PulseObject', json.dumps({
+            "pul": float(upload_data[7])
+            }), {
+                "X-Parse-Application-Id": appID,
+                "X-Parse-REST-API-Key": apiKey,
+                "Content-Type": "applicaton/json"
+             })
+        result = json.loads(connection.getresponse().read())
+        #print result
+        
+	connection.request('POST','/1/classes/EventObject', json.dumps({
             "a_x": float(upload_data[0]),
             "a_y": float(upload_data[1]),
             "a_z": float(upload_data[2]),
@@ -489,7 +499,6 @@ def upload(upload_data):
             "g_y": float(upload_data[4]),
             "g_z": float(upload_data[5]),
             "tmp": float(upload_data[6]),
-            "pul": float(upload_data[7])
             }), {
                 "X-Parse-Application-Id": appID,
                 "X-Parse-REST-API-Key": apiKey,
@@ -501,41 +510,28 @@ def upload(upload_data):
 def parse_chunks(chunks):
         chunks_length = len(chunks)
 
-        a_x_list = []
-        a_y_list = []
-        a_z_list = []
-        g_x_list = []
-        g_y_list = []
-        g_z_list = []
-        tmp_list = []
-        pul_list = []
+        a_x_list = 0 
+        a_y_list = 0
+        a_z_list = 0
+        g_x_list = 0 
+        g_y_list = 0
+        g_z_list = 0
+        tmp_list = 0
+        pul_list = 0
 
-        # Arbitrary chunk size
-	print "chunks_length = %d" % chunks_length
-        chunk_size = chunks_length / 5 
+        for i in xrange(0, chunks_length, 8):
+		tmp_chunks = re.findall("[-+]?\d+[\.]?\d*", chunks[i])
+		#print "intermediate chunks = %s" % chunks
+		a_x_list = (float(tmp_chunks[0]))
+		a_y_list = (float(tmp_chunks[1]))
+		a_z_list = (float(tmp_chunks[2]))
+		g_x_list = (float(tmp_chunks[3]))
+		g_y_list = (float(tmp_chunks[4]))
+		g_z_list = (float(tmp_chunks[5]))
+		tmp_list = temp_scaling * (float(tmp_chunks[6]))
+		pul_list = (float(tmp_chunks[7]))
 
-        for i in xrange(0, chunks_length, chunk_size):
-                chunk = chunks[i: i + chunk_size];
-                for x in range(0, len(chunk)):
-                        a_x_list.append(float(chunk[x][0]))
-                        a_y_list.append(float(chunk[x][1]))
-                        a_z_list.append(float(chunk[x][2]))
-                        g_x_list.append(float(chunk[x][3]))
-                        g_y_list.append(float(chunk[x][4]))
-                        g_z_list.append(float(chunk[x][5]))
-                        tmp_list.append(float(chunk[x][6]))
-                        pul_list.append(float(chunk[x][7]))
-
-                a_x_avg = (sum(a_x_list)/float(len(a_x_list))) / accel_scaling
-                a_y_avg = (sum(a_y_list)/float(len(a_y_list))) / accel_scaling
-                a_z_avg = (sum(a_z_list)/float(len(a_z_list))) / accel_scaling
-                g_x_avg = (sum(g_x_list)/float(len(g_x_list))) / gyro_scaling
-                g_y_avg = (sum(g_y_list)/float(len(g_y_list))) / gyro_scaling
-                g_z_avg = (sum(g_z_list)/float(len(g_z_list))) / gyro_scaling
-                tmp_avg = (sum(tmp_list)/float(len(tmp_list))) * temp_scaling
-                pul_avg = (sum(pul_list)/float(len(pul_list))) / pulse_scaling
-
-                upload_data = [a_x_avg, a_y_avg, a_z_avg, g_x_avg, g_y_avg, g_z_avg, tmp_avg, pul_avg]
+                upload_data = [a_x_list, a_y_list, a_z_list, g_x_list, g_y_list, g_z_list, tmp_list, pul_list]
                 print upload_data
                 upload(upload_data)
 
@@ -544,7 +540,8 @@ def sendtoparse():
         global f
 	f.seek(0,0)
 	inputlines = f.readlines()
-        print "lines read = %s" % inputlines
+	f = open(uploadFilename, 'w+')
+	print "lines read = %d" % len(inputlines)
 	parse_chunks(inputlines)
 
 # gracefully exit without a big exception message if possible
