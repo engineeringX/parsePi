@@ -47,7 +47,7 @@ pulse_scaling = 1024
 appID = "kKW7oJS0nwEG4V6f3LvYooU5BQxFnH6eZ9aS31A3"
 apiKey = "HEZHvUyEqV4VOV61YaEFbMywGKq7pJNlPhlQtWRt"
 uploadFilename = "samples.txt"
-
+f = open(uploadFilename, 'w+')
 connection = httplib.HTTPSConnection('api.parse.com', 443)
 connection.connect()
 
@@ -424,12 +424,15 @@ def bgapi_parse(b):
                                     #ad_manufacturer += [item for sublist in l for item in sublist]
                                     #ad_manufacturer = this_field[1:]
 
-                    # Print out just manufacturer data
-                    data_list = [(x - 65536) if (x & 0x8000) else x for x in ad_manufacturer]
-		    print data_list
-
-		global file_send_counter
-		file_send_counter += 1
+				    # Print out just manufacturer data
+				    data_list = [(x - 65536) if (x & 0x8000) else x for x in ad_manufacturer]
+				    if (len(ad_local_name) > 0):
+					global file_send_counter
+					file_send_counter += 1
+					print data_list
+					#print "ad_local_name = %s" % ad_local_name 
+					f.write(' '.join(str(e) for e in data_list)) 
+					f.write('\n')
 
 		# send file if its time
 		if file_send_counter == 10:
@@ -473,7 +476,7 @@ def bgapi_parse(b):
 				elif c == 'd':
 					disp_list.append("%s" % ''.join(['%02X' % b for b in data_data]))
 
-			print ' '.join(disp_list)
+			#print ' '.join(disp_list)
 
         bgapi_rx_buffer = []
 
@@ -508,7 +511,8 @@ def parse_chunks(chunks):
         pul_list = []
 
         # Arbitrary chunk size
-        chunk_size = chunks_length % 10
+	print "chunks_length = %d" % chunks_length
+        chunk_size = chunks_length / 5 
 
         for i in xrange(0, chunks_length, chunk_size):
                 chunk = chunks[i: i + chunk_size];
@@ -537,11 +541,11 @@ def parse_chunks(chunks):
 
 def sendtoparse():
         inputlines = []
-        f = open('samples.txt')
-        for line in iter(f):
-                inputlines.append(line)
-        f.close()
-        parse_chunks(inputlines)
+        global f
+	f.seek(0,0)
+	inputlines = f.readlines()
+        print "lines read = %s" % inputlines
+	parse_chunks(inputlines)
 
 # gracefully exit without a big exception message if possible
 def ctrl_c_handler(signal, frame):
