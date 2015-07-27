@@ -32,6 +32,7 @@ __email__ = "jeff@rowberg.net"
 import sys, optparse, serial, struct, time, datetime, re, signal
 import json,httplib
 import os
+import datetime
 
 options = []
 filter_uuid = []
@@ -441,7 +442,7 @@ def bgapi_parse(b):
 					f.write('\n')
 
 		# send file if its time
-		if file_send_counter == 5:
+		if file_send_counter == 5000000:
 		   file_send_counter = 0
 		   sendtoparse()
 
@@ -496,7 +497,7 @@ def upload(upload_data):
              })
         result = json.loads(connection.getresponse().read())
         #print result
-        
+       
 	connection.request('POST','/1/classes/EventObject', json.dumps({
             "a_x": float(upload_data[0]),
             "a_y": float(upload_data[1]),
@@ -546,14 +547,14 @@ def parse_chunks(chunks, write):
 			pul_list = (float(tmp_chunks[7]))
 
 			upload_data = [a_x_list, a_y_list, a_z_list, g_x_list, g_y_list, g_z_list, tmp_list, pul_list]
-			#print upload_data
+			print upload_data
 			if (write == True):
 				str_to_write = ','.join(str(e) for e in upload_data)
 				f.write(str_to_write)
 				f.write("\n")
 				upload(upload_data)
 		except:
-			print "something went wrong with input data"
+			print "[%s]: something went wrong with input data" % datetime.datetime.utcnow()
 		
 def sendtoparse():
         inputlines = []
